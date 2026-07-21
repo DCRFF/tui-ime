@@ -60,8 +60,12 @@
 
 ## 第三方依赖
 
+**构建依赖**（非 vendored）：`librime-dev` + `libclang-dev` + `rime-data-luna-pinyin`（apt 系统包）+ `rime-api`（crates.io）。
+
+`thirdpart/` 下的上游 clone **仅为本地参考，不进 git**（已加入 `.gitignore`）：
+
 | 路径 | 说明 | 状态 |
 |---|---|---|
-| `thirdpart/librime/` | Rime 核心引擎 (C, `rime_api.h`) | 只读 |
-| `thirdpart/plum/` | 输入方案 + 配置管理 | 只读 |
-| `thirdpart/librime-rs/` | Rust FFI 封装 (`rime-sys` + `librime`) | 只读 |
+| `thirdpart/librime/` | Rime 核心引擎源码（参考） | 只读 |
+| `thirdpart/plum/` | 输入方案（参考） | 只读 |
+| `thirdpart/librime-rs/` | Rust FFI 封装（参考；实际依赖走 crates.io） | 只读 |
