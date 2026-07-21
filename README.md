@@ -38,11 +38,11 @@ tui-ime/
 ├── AGENTS.md          ← AI agent 工作规范
 ├── STATUS.md          ← 当前项目状态
 ├── docs/reports/      ← 分析报告
-├── thirdpart/
-│   ├── librime/       ← Rime 核心引擎 (C，参考用，构建走系统包 librime-dev)
-│   ├── plum/          ← 输入方案 (朙月拼音, 双拼, ...)
-│   └── librime-rs/    ← Rust FFI 封装 (path 依赖)
-└── src/               ← tui-ime 源码 (proxy / keyevent / keymap / ime)
+├── thirdpart/           ← (可选，不进 git) 上游仓库本地参考 clone
+│   ├── librime/       ← Rime 核心引擎源码（参考用，构建走系统包 librime-dev）
+│   ├── plum/          ← 输入方案（参考用，构建走系统包 rime-data）
+│   └── librime-rs/    ← Rust FFI 封装（参考用，依赖走 crates.io rime-api）
+└── src/               ← tui-ime 源码 (proxy / keyevent / keymap / ime / render)
 ```
 
 ## 快速开始

@@ -11,4 +11,4 @@ nix = { version = "0.28", features = ["fs"] }
 portable-pty = "0.9"
 signal-hook = "0.3"
 unicode-width = "0.2"
-rime-api = { path = "thirdpart/librime-rs" }
+rime-api = "0.12.2"
