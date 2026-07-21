@@ -1,0 +1,14 @@
+[package]
+name = "tui-ime"
+version = "0.1.0"
+edition = "2021"
+description = "Terminal-embedded Chinese IME: PTY proxy + librime + tmux popup"
+
+[dependencies]
+anyhow = "1"
+crossterm = "0.28"
+nix = { version = "0.28", features = ["fs"] }
+portable-pty = "0.9"
+signal-hook = "0.3"
+unicode-width = "0.2"
+rime-api = { path = "thirdpart/librime-rs" }
