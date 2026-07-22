@@ -228,12 +228,9 @@ pub fn default_socket_path() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
             let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-            PathBuf::from(home)
-                .join(".local")
-                .join("share")
-                .join("tui-ime")
+            PathBuf::from(home).join(".local").join("share")
         });
-    runtime.join("daemon.sock")
+    runtime.join("tui-ime").join("daemon.sock")
 }
 
 /// 启动 daemon 主循环（阻塞）。
