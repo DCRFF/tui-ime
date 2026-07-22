@@ -123,6 +123,11 @@ systemctl --user restart tui-ime-daemon        # 下次会话时重新部署
 # 未生效则：rm -rf ~/.local/share/tui-ime/rime/build，再重启 daemon
 ```
 
+注意没有独立的部署命令：`restart` 只是重启 daemon 进程，真正的部署由
+librime 在重启后的首个 session 创建时（即下次打开终端进入 proxy 时）
+懒触发——所以这次连接可能多花几秒等方案重建。部署默认是增量的，删掉
+`build/` 可强制全量重建。
+
 各前端共享的方案/词典源文件在 `/usr/share/rime-data`（由
 `rime-data-luna-pinyin` 等 `rime-data-*` 包提供，如双拼
 `rime-data-double-pinyin`）。用户词库和词频按安装独立存放于

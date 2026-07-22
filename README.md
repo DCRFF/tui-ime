@@ -130,6 +130,12 @@ systemctl --user restart tui-ime-daemon        # redeploys on next session
 # if not picked up: rm -rf ~/.local/share/tui-ime/rime/build, then restart
 ```
 
+There is no explicit deploy command: restarting the daemon only restarts the
+process. The actual deployment is triggered lazily by librime when the first
+session is created after a restart (i.e. the next time a terminal opens the
+proxy) — that first connection may take a few seconds while schemas rebuild.
+Deleting `build/` forces a full rebuild; otherwise deployment is incremental.
+
 Schema/dict source files shared by all frontends live in `/usr/share/rime-data`
 (e.g. `rime-data-luna-pinyin`; more are available as `rime-data-*` packages such
 as `rime-data-double-pinyin`). The user dictionary and learned frequencies are
