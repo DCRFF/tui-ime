@@ -1,85 +1,77 @@
-# tui-ime — 终端嵌入式中文输入法
+# tui-ime — Terminal-Embedded Chinese IME
 
-在 WezTerm 中直接输入中文（tmux 可选），无需 ibus/fcitx/XIM，headless 服务器可用。
+**English** | [中文](README_zh.md)
 
-## 一句话
+Type Chinese directly in your terminal — no ibus/fcitx/XIM required. Works on
+headless servers over SSH, with or without tmux.
 
-把 Rime 输入法引擎塞进 PTY proxy，在终端里用 tmux popup 弹候选窗——Shell 完全无感知。
+The Rime engine is embedded behind a PTY proxy: keystrokes are intercepted,
+composed by librime, and candidates are rendered as an inline strip right at
+the cursor — the shell underneath notices nothing.
 
-## 架构（Phase 3）
+## Screenshot
+
+![inline candidate strip](screenshot/input_test.png)
+
+Typing `shurufaceshi` shows an underlined preedit plus a single-line candidate
+strip (`1.輸入法測試 2.輸入法 3.輸入`); `你好！` on the left was already committed
+straight into the shell prompt.
+
+## Architecture (Phase 3)
 
 ```
 tui-ime (proxy) ──Unix socket──► tui-ime-daemon (librime)
      │                                ▲
-     │  按键拦截 / IME 渲染           │  Unix socket
+     │  keystroke interception        │  Unix socket
+     │  IME rendering                 │
      ▼                                │
- PTY slave ──► zsh/bash              tui-ime-popup (候选窗骨架)
-（外层可为裸终端或 tmux）
+ PTY slave ──► zsh/bash              tui-ime-popup (skeleton)
+(runs under a bare terminal or tmux)
 ```
 
-- **daemon**: systemd user service, 单例运行。管理 librime 生命周期 + session pool + IPC 服务
-- **proxy**: 每终端会话一个实例。PTY 拦截 → CSI u 解析 → daemon IPC → inline ANSI 渲染
-- **popup**: tmux display-popup 候选窗（Phase 3 骨架，Phase 4 完善交互）
+- **daemon**: systemd user service, single instance. Owns the librime lifecycle,
+  a session pool, and the IPC service.
+- **proxy**: one instance per terminal session. PTY interception → CSI u parsing
+  → daemon IPC → inline ANSI rendering.
+- **popup**: tmux `display-popup` candidate window (skeleton in Phase 3,
+  interaction lands in Phase 4).
 
-## 技术栈
+## Tech stack
 
-| 层 | 技术 |
+| Layer | Tech |
 |---|---|
-| 键盘协议 | Kitty keyboard protocol (WezTerm 内置) |
-| 候选窗 | tmux `display-popup` |
-| 输入引擎 | librime (Rime, C API) |
-| PTY 管理 | Rust `portable-pty` |
-| 实现语言 | Rust |
+| Keyboard protocol | Kitty keyboard protocol (built into WezTerm) |
+| Candidate window | tmux `display-popup` |
+| Input engine | librime (Rime, C API) |
+| PTY management | Rust `portable-pty` |
+| Language | Rust |
 
-## 仓库结构
+**Target environment**: WezTerm + zsh/bash on Linux, optionally inside tmux.
+Other kitty-protocol terminals (kitty / foot / Ghostty / Alacritty) can be
+adapted on demand. xterm / urxvt / Linux console are not supported.
 
-```
-tui-ime/
-├── README.md              ← 你在这里
-├── AGENTS.md              ← AI agent 工作规范
-├── STATUS.md              ← 当前项目状态
-├── tui-ime-daemon.service ← systemd user service
-├── docs/reports/          ← 分析报告（不进 git）
-├── thirdpart/             ← 上游仓库本地参考（不进 git）
-└── src/
-    ├── lib.rs             ← library root
-    ├── protocol.rs        ← IPC 消息类型
-    ├── ipc.rs             ← Unix socket 传输层
-    ├── config.rs          ← tui-ime.toml 加载
-    ├── daemon.rs          ← session pool + 消息分发
-    ├── ime.rs             ← librime 会话封装
-    ├── keyevent.rs        ← CSI u / SS3 解析
-    ├── keymap.rs          ← 按键 → rime keycode 映射
-    ├── proxy.rs           ← PTY proxy 核心
-    ├── render.rs          ← inline ANSI 候选条
-    ├── main.rs            ← tui-ime（proxy）入口
-    └── bin/
-        ├── daemon.rs      ← tui-ime-daemon 入口
-        └── popup.rs       ← tui-ime-popup 入口（骨架）
-```
-## 快速开始
-
-### Phase 3：daemon + proxy 分离
+## Quick start
 
 ```bash
-# 1. 安装依赖
+# 1. Install dependencies
 sudo apt install librime-dev libclang-dev rime-data-luna-pinyin
 
-# 2. 编译并安装二进制
+# 2. Build and install the binaries
 cargo build --release
 install -Dm755 target/release/tui-ime-daemon ~/.local/bin/tui-ime-daemon
 install -Dm755 target/release/tui-ime ~/.local/bin/tui-ime
 
-# 3. 安装并启动 daemon（systemd user service，开机自启 + 崩溃自动重启）
+# 3. Install and start the daemon (systemd user service: autostart on login,
+#    auto-restart on crash)
 install -Dm644 tui-ime-daemon.service ~/.config/systemd/user/tui-ime-daemon.service
 systemctl --user daemon-reload
 systemctl --user enable --now tui-ime-daemon
 
-# 4. 让交互式 shell 自动进入 proxy（与 tmux 解耦，开不开 tmux 都生效）
-#    在 ~/.zshrc 末尾追加（exec 之后的内容不会执行，务必放最后）：
+# 4. Wrap every interactive shell in the proxy (works with or without tmux).
+#    Append to the END of ~/.zshrc — nothing after `exec` will run:
 cat >> ~/.zshrc <<'EOF'
 
-# tui-ime: 终端嵌入式中文输入法（daemon 由 systemd --user 托管）
+# tui-ime: terminal-embedded Chinese IME (daemon managed by systemd --user)
 if [[ -o interactive && -z "$TUI_IME_ACTIVE" \
    && -S "${XDG_RUNTIME_DIR:-$HOME/.local/share}/tui-ime/daemon.sock" \
    && -x "$HOME/.local/bin/tui-ime" ]]; then
@@ -87,57 +79,85 @@ if [[ -o interactive && -z "$TUI_IME_ACTIVE" \
 fi
 EOF
 
-# 用 bash 则加到 ~/.bashrc，交互判断换成：[[ $- == *i* ]]
-# 也可以不改动 shell 配置，需要时手动运行 tui-ime
+# bash users: append the same block to ~/.bashrc and replace the
+# interactive check with [[ $- == *i* ]]
+# You can also skip the shell integration and just run `tui-ime` manually.
 
-# 默认切换键：Ctrl+\ （不冲突系统输入法）
-# 输入时光标处显示淡色 preedit + 单行候选条
+# Default toggle key: Ctrl+\ (does not clash with system IMEs)
+# While composing, an inline preedit + candidate strip appears at the cursor.
 ```
 
-守卫说明：`TUI_IME_ACTIVE` 由 proxy 注入，防止嵌套包裹（proxy 里再开 shell 会直接跳过）；
-socket / 二进制不存在时回退到普通 shell。
+About the guards: `TUI_IME_ACTIVE` is injected by the proxy to prevent nested
+wrapping (a shell started inside the proxy skips re-wrapping); if the socket or
+the binary is missing, the shell falls back to normal operation.
 
-daemon 未运行时 proxy 会静默降级为纯透传（toggle 无效）。排查：
+When the daemon is down, the proxy silently degrades to plain passthrough
+(toggle does nothing). To troubleshoot:
 
 ```bash
-systemctl --user status tui-ime-daemon   # 应为 active (running)
-ls /run/user/$UID/tui-ime/daemon.sock    # socket 应存在
+systemctl --user status tui-ime-daemon   # should be active (running)
+ls /run/user/$UID/tui-ime/daemon.sock    # socket should exist
 ```
 
-### 切换键配置
+## Toggle key configuration
 
-默认 `Ctrl+\`（codepoint=92, modifiers=5 即 Ctrl）。
-如需改为 `Ctrl+Space` 或其他键：
+The default is `Ctrl+\` (codepoint=92, modifiers=5 i.e. Ctrl).
+To use `Ctrl+Space` or another key:
 
 ```bash
-# 环境变量方式（立即生效）
+# Environment variable (takes effect immediately)
 TUI_IME_TOGGLE=32:5 tui-ime   # Ctrl+Space
 TUI_IME_TOGGLE=96:5 tui-ime   # Ctrl+`
 
-# 配置文件方式（~/.config/tui-ime/tui-ime.toml）
+# Config file (~/.config/tui-ime/tui-ime.toml)
 [proxy]
 toggle_codepoint = 32   # Space
-toggle_modifiers = 5     # Ctrl（Kitty 编码 = bitmask + 1；Ctrl=5, Alt=3, Shift=2）
+toggle_modifiers = 5    # Ctrl (kitty encoding = bitmask + 1; Ctrl=5, Alt=3, Shift=2)
 ```
 
-modifiers 使用 Kitty keyboard protocol 的原始编码值（实际修饰键 bitmask + 1）。
-常用值：无修饰=1, Shift=2, Alt=3, Ctrl=5, Ctrl+Shift=7。
+Modifiers use the raw Kitty keyboard protocol encoding (actual modifier bitmask
++ 1). Common values: none=1, Shift=2, Alt=3, Ctrl=5, Ctrl+Shift=7.
 
-### tmux 内使用的额外要求（不开 tmux 可忽略）
+## Using inside tmux (optional)
 
-裸终端下 proxy 直接和 WezTerm 协商扩展按键，无需任何配置。
-在 tmux 里使用时，需要让 tmux 透传并转译扩展按键（~/.tmux.conf）：
+In a bare terminal the proxy negotiates extended keys with WezTerm directly —
+no configuration needed. Inside tmux, tmux must forward and re-encode extended
+keys (`~/.tmux.conf`):
 
 ```tmux
-set -s -g extended-keys on                          # 窗格侧扩展按键（server 选项）
-set -g extended-keys-format csi-u                   # 以 CSI u 格式上报
-set -as terminal-features ",xterm-256color:extkeys" # 声明外层终端支持扩展按键
+set -s -g extended-keys on                          # extended keys on the pane side (server option)
+set -g extended-keys-format csi-u                   # report in CSI u format
+set -as terminal-features ",xterm-256color:extkeys" # declare outer terminal support
 ```
 
-改完需 detach + reattach 生效（`extended-keys always` 可替代第三行）。
+Detach and reattach for the change to take effect (`extended-keys always` can
+replace the third line).
 
-## 相关文档
+## Repository layout
 
-- [可行性分析报告](docs/reports/2026-07-21-01-terminal-embedded-chinese-ime-feasibility.md) — 完整的技术分析
-- [STATUS.md](STATUS.md) — 当前进度
-- [AGENTS.md](AGENTS.md) — AI agent 规范
+```
+tui-ime/
+├── README.md              ← you are here
+├── README_zh.md           ← 中文说明
+├── AGENTS.md              ← AI agent conventions
+├── STATUS.md              ← current project status
+├── tui-ime-daemon.service ← systemd user service
+├── screenshot/            ← usage screenshots
+├── docs/reports/          ← analysis reports (not committed)
+├── thirdpart/             ← local upstream references (not committed)
+└── src/
+    ├── lib.rs             ← library root
+    ├── protocol.rs        ← IPC message types
+    ├── ipc.rs             ← Unix socket transport
+    ├── config.rs          ← tui-ime.toml loading
+    ├── daemon.rs          ← session pool + dispatch
+    ├── ime.rs             ← librime session wrapper
+    ├── keyevent.rs        ← CSI u / SS3 / modifyOtherKeys parsing
+    ├── keymap.rs          ← key → rime keycode mapping
+    ├── proxy.rs           ← PTY proxy core
+    ├── render.rs          ← inline ANSI candidate strip
+    ├── main.rs            ← tui-ime (proxy) entry
+    └── bin/
+        ├── daemon.rs      ← tui-ime-daemon entry
+        └── popup.rs       ← tui-ime-popup entry (skeleton)
+```
