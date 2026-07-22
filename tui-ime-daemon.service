@@ -1,0 +1,12 @@
+[Unit]
+Description=tui-ime daemon (librime IME backend)
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/tui-ime-daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

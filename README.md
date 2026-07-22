@@ -6,19 +6,19 @@
 
 把 Rime 输入法引擎塞进 PTY proxy，在终端里用 tmux popup 弹候选窗——Shell 完全无感知。
 
-## 架构
+## 架构（Phase 3）
 
 ```
-WezTerm → PTY master → [IME Proxy] → PTY slave → zsh/bash
-              ↑
-         Kitty keyboard protocol
-         所有按键以 CSI u 上报
-              │
-         ┌────┴────┐
-         │ 透传     │ IME 激活
-         ▼          ▼
-       Shell    Rime → tmux popup 候选窗 → commit 中文注入 slave
+tui-ime (proxy) ──Unix socket──► tui-ime-daemon (librime)
+     │                                ▲
+     │  按键拦截 / IME 渲染           │  Unix socket
+     ▼                                │
+ PTY slave ──► tmux ──► zsh/bash    tui-ime-popup (候选窗骨架)
 ```
+
+- **daemon**: systemd user service, 单例运行。管理 librime 生命周期 + session pool + IPC 服务
+- **proxy**: 每终端会话一个实例。PTY 拦截 → CSI u 解析 → daemon IPC → inline ANSI 渲染
+- **popup**: tmux display-popup 候选窗（Phase 3 骨架，Phase 4 完善交互）
 
 ## 技术栈
 
@@ -34,32 +34,67 @@ WezTerm → PTY master → [IME Proxy] → PTY slave → zsh/bash
 
 ```
 tui-ime/
-├── README.md          ← 你在这里
-├── AGENTS.md          ← AI agent 工作规范
-├── STATUS.md          ← 当前项目状态
-├── docs/reports/      ← 分析报告
-├── thirdpart/           ← (可选，不进 git) 上游仓库本地参考 clone
-│   ├── librime/       ← Rime 核心引擎源码（参考用，构建走系统包 librime-dev）
-│   ├── plum/          ← 输入方案（参考用，构建走系统包 rime-data）
-│   └── librime-rs/    ← Rust FFI 封装（参考用，依赖走 crates.io rime-api）
-└── src/               ← tui-ime 源码 (proxy / keyevent / keymap / ime / render)
+├── README.md              ← 你在这里
+├── AGENTS.md              ← AI agent 工作规范
+├── STATUS.md              ← 当前项目状态
+├── tui-ime-daemon.service ← systemd user service
+├── docs/reports/          ← 分析报告（不进 git）
+├── thirdpart/             ← 上游仓库本地参考（不进 git）
+└── src/
+    ├── lib.rs             ← library root
+    ├── protocol.rs        ← IPC 消息类型
+    ├── ipc.rs             ← Unix socket 传输层
+    ├── config.rs          ← tui-ime.toml 加载
+    ├── daemon.rs          ← session pool + 消息分发
+    ├── ime.rs             ← librime 会话封装
+    ├── keyevent.rs        ← CSI u / SS3 解析
+    ├── keymap.rs          ← 按键 → rime keycode 映射
+    ├── proxy.rs           ← PTY proxy 核心
+    ├── render.rs          ← inline ANSI 候选条
+    ├── main.rs            ← tui-ime（proxy）入口
+    └── bin/
+        ├── daemon.rs      ← tui-ime-daemon 入口
+        └── popup.rs       ← tui-ime-popup 入口（骨架）
 ```
-
 ## 快速开始
 
+### Phase 3：daemon + proxy 分离
+
 ```bash
-# 1. 安装依赖（Debian trixie；libclang-dev 供 bindgen 生成 FFI 绑定）
+# 1. 安装依赖
 sudo apt install librime-dev libclang-dev rime-data-luna-pinyin
 
 # 2. 编译
 cargo build --release
 
-# 3. 在 WezTerm + tmux 中运行
-./target/release/tui-ime --log /tmp/tui-ime.log
+# 3. 启动 daemon（librime 后端，首次部署需 1-3 秒）
+./target/release/tui-ime-daemon &
 
-# Ctrl+Space 切换中英文；输入时光标处显示淡色 preedit + 单行候选条；
-# 数字选字、Space 首选、↑↓ 高亮、PageUp/Down 翻页、Esc 取消
+# 4. 在 WezTerm + tmux 中启动 proxy
+./target/release/tui-ime
+
+# 默认切换键：Ctrl+\ （不冲突系统输入法）
+# 输入时光标处显示淡色 preedit + 单行候选条
 ```
+
+### 切换键配置
+
+默认 `Ctrl+\`（codepoint=92, modifiers=5 即 Ctrl）。
+如需改为 `Ctrl+Space` 或其他键：
+
+```bash
+# 环境变量方式（立即生效）
+TUI_IME_TOGGLE=32:5 ./target/release/tui-ime   # Ctrl+Space
+TUI_IME_TOGGLE=96:5 ./target/release/tui-ime   # Ctrl+`
+
+# 配置文件方式（~/.config/tui-ime/tui-ime.toml）
+[proxy]
+toggle_codepoint = 32   # Space
+toggle_modifiers = 5     # Ctrl（Kitty 编码 = bitmask + 1；Ctrl=5, Alt=3, Shift=2）
+```
+
+modifiers 使用 Kitty keyboard protocol 的原始编码值（实际修饰键 bitmask + 1）。
+常用值：无修饰=1, Shift=2, Alt=3, Ctrl=5, Ctrl+Shift=7。
 
 tmux 配置要求（~/.tmux.conf）：
 
