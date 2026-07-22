@@ -64,17 +64,28 @@ tui-ime/
 # 1. 安装依赖
 sudo apt install librime-dev libclang-dev rime-data-luna-pinyin
 
-# 2. 编译
+# 2. 编译并安装二进制
 cargo build --release
+install -Dm755 target/release/tui-ime-daemon ~/.local/bin/tui-ime-daemon
+install -Dm755 target/release/tui-ime ~/.local/bin/tui-ime
 
-# 3. 启动 daemon（librime 后端，首次部署需 1-3 秒）
-./target/release/tui-ime-daemon &
+# 3. 安装并启动 daemon（systemd user service，开机自启 + 崩溃自动重启）
+install -Dm644 tui-ime-daemon.service ~/.config/systemd/user/tui-ime-daemon.service
+systemctl --user daemon-reload
+systemctl --user enable --now tui-ime-daemon
 
-# 4. 在 WezTerm + tmux 中启动 proxy
-./target/release/tui-ime
+# 4. 在 WezTerm + tmux 中启动 proxy（每个终端会话一个）
+tui-ime
 
 # 默认切换键：Ctrl+\ （不冲突系统输入法）
 # 输入时光标处显示淡色 preedit + 单行候选条
+```
+
+daemon 未运行时 proxy 会静默降级为纯透传（toggle 无效）。排查：
+
+```bash
+systemctl --user status tui-ime-daemon   # 应为 active (running)
+ls /run/user/$UID/tui-ime/daemon.sock    # socket 应存在
 ```
 
 ### 切换键配置
@@ -84,8 +95,8 @@ cargo build --release
 
 ```bash
 # 环境变量方式（立即生效）
-TUI_IME_TOGGLE=32:5 ./target/release/tui-ime   # Ctrl+Space
-TUI_IME_TOGGLE=96:5 ./target/release/tui-ime   # Ctrl+`
+TUI_IME_TOGGLE=32:5 tui-ime   # Ctrl+Space
+TUI_IME_TOGGLE=96:5 tui-ime   # Ctrl+`
 
 # 配置文件方式（~/.config/tui-ime/tui-ime.toml）
 [proxy]
