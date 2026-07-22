@@ -249,8 +249,13 @@ pub fn run(config: &Config, socket_path: &Path) -> io::Result<()> {
         eprintln!("tui-ime-daemon: client connected from {:?}", addr);
         let shared = Arc::clone(&shared);
         std::thread::spawn(move || {
-            if let Err(e) = handle_client(stream, shared) {
-                eprintln!("tui-ime-daemon: client error: {e}");
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                handle_client(stream, shared)
+            }));
+            match result {
+                Ok(Err(e)) => eprintln!("tui-ime-daemon: client error: {e}"),
+                Err(panic) => eprintln!("tui-ime-daemon: client panic: {panic:?}"),
+                _ => {}
             }
         });
     }

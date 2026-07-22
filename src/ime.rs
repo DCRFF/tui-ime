@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use anyhow::{Context as _, Result};
+use anyhow::{bail, Context as _, Result};
 use rime_api::{
     create_session, full_deploy_and_wait, initialize, setup, DeployResult, Session, Traits,
 };
@@ -35,11 +35,11 @@ impl Ime {
     /// 创建 rime 会话。
     /// librime 全局初始化（setup/initialize/deploy）仅首次调用时执行一次。
     pub fn new(user_data_dir: &Path) -> Result<Self> {
-        use std::sync::Once;
-        static INIT: Once = Once::new();
+        use std::sync::OnceLock;
+        static INIT: OnceLock<Result<(), String>> = OnceLock::new();
 
         let user_data = user_data_dir.to_string_lossy().to_string();
-        INIT.call_once(|| {
+        if let Err(e) = INIT.get_or_init(|| {
             let mut traits = Traits::new();
             traits
                 .set_shared_data_dir("/usr/share/rime-data")
@@ -51,11 +51,13 @@ impl Ime {
                 .set_min_log_level(3);
             setup(&mut traits);
             initialize(&mut traits);
-            // full_deploy_and_wait 只在首次初始化时跑一次
-            if let DeployResult::Failure = full_deploy_and_wait() {
-                eprintln!("tui-ime-daemon: rime deployment failed");
+            match full_deploy_and_wait() {
+                DeployResult::Success => Ok(()),
+                DeployResult::Failure => Err("rime deployment failed".to_string()),
             }
-        });
+        }) {
+            bail!("rime initialization failed: {e}");
+        }
 
         let session = create_session().context("create rime session")?;
         Ok(Self { session })
