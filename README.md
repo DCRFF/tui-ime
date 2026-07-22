@@ -17,7 +17,7 @@ Typing `shurufaceshi` shows an underlined preedit plus a single-line candidate
 strip (`1.輸入法測試 2.輸入法 3.輸入`); `你好！` on the left was already committed
 straight into the shell prompt.
 
-## Architecture (Phase 3)
+## Architecture
 
 ```
 tui-ime (proxy) ──Unix socket──► tui-ime-daemon (librime)
@@ -33,8 +33,7 @@ tui-ime (proxy) ──Unix socket──► tui-ime-daemon (librime)
   a session pool, and the IPC service.
 - **proxy**: one instance per terminal session. PTY interception → CSI u parsing
   → daemon IPC → inline ANSI rendering.
-- **popup**: tmux `display-popup` candidate window (skeleton in Phase 3,
-  interaction lands in Phase 4).
+- **popup**: tmux `display-popup` candidate window (skeleton).
 
 ## Tech stack
 
@@ -117,6 +116,29 @@ toggle_modifiers = 5    # Ctrl (kitty encoding = bitmask + 1; Ctrl=5, Alt=3, Shi
 
 Modifiers use the raw Kitty keyboard protocol encoding (actual modifier bitmask
 + 1). Common values: none=1, Shift=2, Alt=3, Ctrl=5, Ctrl+Shift=7.
+
+## Rime configuration
+
+tui-ime uses the standard Rime user data directory at
+`~/.local/share/tui-ime/rime` — anything that works for other Rime frontends
+(ibus-rime, fcitx5-rime, Weasel) works here: `*.custom.yaml` patches, custom
+schemas and dictionaries, `custom_phrase.txt`, and so on. Just drop the files
+in and redeploy:
+
+```bash
+systemctl --user restart tui-ime-daemon        # redeploys on next session
+# if not picked up: rm -rf ~/.local/share/tui-ime/rime/build, then restart
+```
+
+Schema/dict source files shared by all frontends live in `/usr/share/rime-data`
+(e.g. `rime-data-luna-pinyin`; more are available as `rime-data-*` packages such
+as `rime-data-double-pinyin`). The user dictionary and learned frequencies are
+stored per-installation under `~/.local/share/tui-ime/rime/`, separate from
+ibus/fcitx.
+
+Note: horizontal/vertical layout and other UI-style settings are frontend
+concerns — tui-ime always renders a single-line inline strip, so options like
+`style/horizontal` have no effect.
 
 ## Using inside tmux (optional)
 

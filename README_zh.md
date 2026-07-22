@@ -16,7 +16,7 @@ Rime 引擎嵌在 PTY proxy 后面：按键被拦截后交给 librime 组合，�
 （`1.輸入法測試 2.輸入法 3.輸入`）；左侧红色的 `你好！` 是已经直接上屏到
 shell 提示符里的内容。
 
-## 架构（Phase 3）
+## 架构
 
 ```
 tui-ime (proxy) ──Unix socket──► tui-ime-daemon (librime)
@@ -31,7 +31,7 @@ tui-ime (proxy) ──Unix socket──► tui-ime-daemon (librime)
   session pool + IPC 服务。
 - **proxy**：每终端会话一个实例。PTY 拦截 → CSI u 解析 → daemon IPC →
   inline ANSI 渲染。
-- **popup**：tmux `display-popup` 候选窗（Phase 3 骨架，Phase 4 完善交互）。
+- **popup**：tmux `display-popup` 候选窗（骨架）。
 
 ## 技术栈
 
@@ -110,6 +110,26 @@ toggle_modifiers = 5    # Ctrl（Kitty 编码 = bitmask + 1；Ctrl=5, Alt=3, Shi
 
 modifiers 使用 Kitty keyboard protocol 的原始编码值（实际修饰键 bitmask + 1）。
 常用值：无修饰=1，Shift=2，Alt=3，Ctrl=5，Ctrl+Shift=7。
+
+## Rime 配置
+
+tui-ime 的用户数据目录是 `~/.local/share/tui-ime/rime`，遵循标准的 Rime
+配置方案——其他 Rime 前端（ibus-rime、fcitx5-rime、小狼毫）能用的东西
+在这里都能用：`*.custom.yaml` 补丁、自定义方案与词典、`custom_phrase.txt`
+等。文件放进去后重新部署即可生效：
+
+```bash
+systemctl --user restart tui-ime-daemon        # 下次会话时重新部署
+# 未生效则：rm -rf ~/.local/share/tui-ime/rime/build，再重启 daemon
+```
+
+各前端共享的方案/词典源文件在 `/usr/share/rime-data`（由
+`rime-data-luna-pinyin` 等 `rime-data-*` 包提供，如双拼
+`rime-data-double-pinyin`）。用户词库和词频按安装独立存放于
+`~/.local/share/tui-ime/rime/`，与 ibus/fcitx 互不相通。
+
+注意：横排/竖排等 UI 样式属于前端行为，tui-ime 永远渲染单行 inline
+候选条，`style/horizontal` 之类的设置无效。
 
 ## tmux 内使用的额外要求（不开 tmux 可忽略）
 
