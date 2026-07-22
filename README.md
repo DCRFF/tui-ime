@@ -1,6 +1,6 @@
 # tui-ime — 终端嵌入式中文输入法
 
-在 WezTerm + tmux 中直接输入中文，无需 ibus/fcitx/XIM，headless 服务器可用。
+在 WezTerm 中直接输入中文（tmux 可选），无需 ibus/fcitx/XIM，headless 服务器可用。
 
 ## 一句话
 
@@ -13,7 +13,8 @@ tui-ime (proxy) ──Unix socket──► tui-ime-daemon (librime)
      │                                ▲
      │  按键拦截 / IME 渲染           │  Unix socket
      ▼                                │
- PTY slave ──► tmux ──► zsh/bash    tui-ime-popup (候选窗骨架)
+ PTY slave ──► zsh/bash              tui-ime-popup (候选窗骨架)
+（外层可为裸终端或 tmux）
 ```
 
 - **daemon**: systemd user service, 单例运行。管理 librime 生命周期 + session pool + IPC 服务
@@ -74,12 +75,27 @@ install -Dm644 tui-ime-daemon.service ~/.config/systemd/user/tui-ime-daemon.serv
 systemctl --user daemon-reload
 systemctl --user enable --now tui-ime-daemon
 
-# 4. 在 WezTerm + tmux 中启动 proxy（每个终端会话一个）
-tui-ime
+# 4. 让交互式 shell 自动进入 proxy（与 tmux 解耦，开不开 tmux 都生效）
+#    在 ~/.zshrc 末尾追加（exec 之后的内容不会执行，务必放最后）：
+cat >> ~/.zshrc <<'EOF'
+
+# tui-ime: 终端嵌入式中文输入法（daemon 由 systemd --user 托管）
+if [[ -o interactive && -z "$TUI_IME_ACTIVE" \
+   && -S "${XDG_RUNTIME_DIR:-$HOME/.local/share}/tui-ime/daemon.sock" \
+   && -x "$HOME/.local/bin/tui-ime" ]]; then
+  exec "$HOME/.local/bin/tui-ime"
+fi
+EOF
+
+# 用 bash 则加到 ~/.bashrc，交互判断换成：[[ $- == *i* ]]
+# 也可以不改动 shell 配置，需要时手动运行 tui-ime
 
 # 默认切换键：Ctrl+\ （不冲突系统输入法）
 # 输入时光标处显示淡色 preedit + 单行候选条
 ```
+
+守卫说明：`TUI_IME_ACTIVE` 由 proxy 注入，防止嵌套包裹（proxy 里再开 shell 会直接跳过）；
+socket / 二进制不存在时回退到普通 shell。
 
 daemon 未运行时 proxy 会静默降级为纯透传（toggle 无效）。排查：
 
@@ -107,7 +123,10 @@ toggle_modifiers = 5     # Ctrl（Kitty 编码 = bitmask + 1；Ctrl=5, Alt=3, Sh
 modifiers 使用 Kitty keyboard protocol 的原始编码值（实际修饰键 bitmask + 1）。
 常用值：无修饰=1, Shift=2, Alt=3, Ctrl=5, Ctrl+Shift=7。
 
-tmux 配置要求（~/.tmux.conf）：
+### tmux 内使用的额外要求（不开 tmux 可忽略）
+
+裸终端下 proxy 直接和 WezTerm 协商扩展按键，无需任何配置。
+在 tmux 里使用时，需要让 tmux 透传并转译扩展按键（~/.tmux.conf）：
 
 ```tmux
 set -s -g extended-keys on                          # 窗格侧扩展按键（server 选项）

@@ -4,6 +4,8 @@
 //! 字节，仅修饰组合键 / 特殊键以 CSI 序列上报。本模块职责：
 //! - 增量解析 CSI 序列 → [`KeyEvent`]（跨 read 边界缓冲）
 //! - 增量解析 SS3 序列（`\eOA` 等）：application 光标模式下的方向键/Home
+//! - 兼容 modifyOtherKeys 格式（`\e[27;<mod>;<cp>~`，裸终端下 WezTerm 等的
+//!   Ctrl 组合键上报），归一化为等价 CSI u 事件
 //! - IME 关闭时把无 legacy 等价物的序列回译为 legacy 字节（如 ctrl+a → 0x01），
 //!   使不了解 kitty protocol 的 shell/readline 正常工作
 
@@ -175,8 +177,30 @@ fn parse_csi(raw: &[u8]) -> Option<KeyEvent> {
     let mut fields = params.split(|&b| b == b';');
     let f1 = fields.next().unwrap_or(&[]);
     let f2 = fields.next();
+    let f3 = fields.next();
     if fields.next().is_some() {
         return None; // 不支持更多段（如 text-as-codepoints）
+    }
+
+    // modifyOtherKeys 格式 `\e[27;<mod>;<cp>~`：裸终端（无 tmux）下
+    // WezTerm 等对 Ctrl 组合键的上报（tmux 侧会转译为 CSI u，走不到这里）。
+    // 归一化为等价的 kitty CSI u KeyEvent，下游无需区分两种格式。
+    if let Some(f) = f3 {
+        if terminator != b'~' || parse_num(f1) != Some(27) {
+            return None;
+        }
+        let codepoint = parse_num(f)?;
+        let modifiers = match f2 {
+            Some(m) => decode_modifiers(parse_num(m)?),
+            None => 0,
+        };
+        return Some(KeyEvent {
+            codepoint,
+            modifiers,
+            event_type: EventType::Press,
+            terminator: b'u',
+            raw: raw.to_vec(),
+        });
     }
 
     let codepoint = parse_num(first_subfield(f1))?;
@@ -184,9 +208,7 @@ fn parse_csi(raw: &[u8]) -> Option<KeyEvent> {
         None => (0, EventType::Press),
         Some(f) => {
             let mut subs = f.split(|&b| b == b':');
-            let m = parse_num(subs.next().unwrap())?;
-            // kitty 修饰键值 = bitmask + 1，缺省/0 视为 1（无修饰）
-            let mods = (if m == 0 { 1 } else { m }).saturating_sub(1) as u8;
+            let mods = decode_modifiers(parse_num(subs.next().unwrap())?);
             let ev = match subs.next() {
                 None => EventType::Press,
                 Some(s) => match parse_num(s)? {
@@ -210,6 +232,11 @@ fn parse_csi(raw: &[u8]) -> Option<KeyEvent> {
 
 fn first_subfield(f: &[u8]) -> &[u8] {
     f.split(|&b| b == b':').next().unwrap()
+}
+
+/// kitty / modifyOtherKeys 修饰键值 = bitmask + 1，缺省/0 视为 1（无修饰）
+fn decode_modifiers(m: u32) -> u8 {
+    (if m == 0 { 1 } else { m }).saturating_sub(1) as u8
 }
 
 /// 解析 DSR 响应 `\e[<row>;<col>R`：恰好两个纯数字字段
@@ -310,6 +337,23 @@ mod tests {
         assert_eq!(ev.codepoint, 32);
         assert_eq!(ev.modifiers, CTRL);
         assert_eq!(ev.terminator, b'u'); // CSI-u format, usable as toggle
+    }
+
+    #[test]
+    fn parse_modify_other_keys() {
+        // 裸终端（无 tmux）下 WezTerm 以 modifyOtherKeys 格式上报 Ctrl 组合键，
+        // 归一化为等价 CSI u 事件（raw 保留原样）
+        let ev = key(b"\x1b[27;5;92~"); // Ctrl+\
+        assert_eq!(ev.codepoint, 92);
+        assert_eq!(ev.modifiers, CTRL);
+        assert_eq!(ev.terminator, b'u');
+        assert_eq!(ev.raw, b"\x1b[27;5;92~");
+        assert_eq!(to_legacy(&ev), Some(vec![0x1c])); // IME 关闭时回译为 FS 控制字节
+
+        let ev = key(b"\x1b[27;5;32~"); // Ctrl+Space
+        assert_eq!(ev.codepoint, 32);
+        assert_eq!(ev.modifiers, CTRL);
+        assert_eq!(to_legacy(&ev), Some(vec![0x00]));
     }
 
     #[test]

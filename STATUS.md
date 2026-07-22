@@ -23,6 +23,8 @@ tmux 多窗格端到端验证 OK（toggle → 候选条 → 上屏）；daemon �
 - [x] daemon client 线程 `catch_unwind` 防 panic 丢连接
 - [x] Popup 骨架 + systemd user service
 - [x] daemon 部署：`~/.local/bin/` 二进制 + `systemctl --user enable --now tui-ime-daemon`
+- [x] proxy 触发点改入 `~/.zshrc`（与 tmux 解耦，`TUI_IME_ACTIVE` 防嵌套）
+- [x] 裸终端 modifyOtherKeys 兼容：解析 `\e[27;<mod>;<cp>~` 并归一化为 CSI u（修复非 tmux 环境 Ctrl+\ 乱码、toggle 失效）
 - [x] 移除联调期临时调试日志（`toggle_check` / `rime_key` eprintln）
 - [x] `cargo test --lib` 38 项全绿
 
