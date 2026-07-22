@@ -4,11 +4,29 @@ version = "0.1.0"
 edition = "2021"
 description = "Terminal-embedded Chinese IME: PTY proxy + librime + tmux popup"
 
+[[bin]]
+name = "tui-ime"
+path = "src/main.rs"
+
+[[bin]]
+name = "tui-ime-daemon"
+path = "src/bin/daemon.rs"
+
+[[bin]]
+name = "tui-ime-popup"
+path = "src/bin/popup.rs"
+
 [dependencies]
 anyhow = "1"
 crossterm = "0.28"
-nix = { version = "0.28", features = ["fs"] }
+nix = { version = "0.28", features = ["fs", "poll"] }
 portable-pty = "0.9"
 signal-hook = "0.3"
 unicode-width = "0.2"
 rime-api = "0.12.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3"
