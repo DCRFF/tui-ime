@@ -1,15 +1,8 @@
-#![forbid(unsafe_code)]
-
-mod ime;
-mod keyevent;
-mod keymap;
-mod proxy;
-mod render;
-
 use std::env;
 use std::fs::File;
-use std::path::Path;
 use std::process::ExitCode;
+
+use tui_ime::{self, NEST_GUARD_ENV};
 
 /// 命令行参数
 struct Args {
@@ -53,6 +46,13 @@ fn print_usage() {
 fn main() -> ExitCode {
     match parse_args() {
         Ok(args) => {
+            // 已在 tui-ime proxy 内：拒绝嵌套启动（在 rime 部署前快速退出）
+            if env::var_os(NEST_GUARD_ENV).is_some() {
+                eprintln!(
+                    "tui-ime: already inside a tui-ime proxy ({NEST_GUARD_ENV} is set); nested launch refused"
+                );
+                return ExitCode::FAILURE;
+            }
             let log = match &args.log {
                 Some(path) => match File::create(path) {
                     Ok(f) => Some(f),
@@ -63,16 +63,9 @@ fn main() -> ExitCode {
                 },
                 None => None,
             };
-            // 初始化 rime（首次部署需数秒）；失败时降级为纯透传（计划 R3/R8）
-            eprintln!("tui-ime: initializing rime...");
-            let rime = match ime::Ime::new(Path::new(&ime::default_user_data_dir())) {
-                Ok(r) => Some(r),
-                Err(e) => {
-                    eprintln!("tui-ime: rime init failed, falling back to passthrough: {e:#}");
-                    None
-                }
-            };
-            match proxy::run(&args.command, log, rime) {
+            // IME 后端由 daemon 管理，proxy 启动时自动连接 daemon socket；
+            // 若 daemon 不可用则纯透传降级
+            match tui_ime::proxy::run(&args.command, log) {
                 Ok(code) => ExitCode::from(code as u8),
                 Err(e) => {
                     eprintln!("tui-ime: {e:#}");

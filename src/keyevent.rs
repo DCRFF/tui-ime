@@ -3,6 +3,7 @@
 //! 终端在 flags=0b1（disambiguate，计划 D8）下：普通可打印键仍走 legacy
 //! 字节，仅修饰组合键 / 特殊键以 CSI 序列上报。本模块职责：
 //! - 增量解析 CSI 序列 → [`KeyEvent`]（跨 read 边界缓冲）
+//! - 增量解析 SS3 序列（`\eOA` 等）：application 光标模式下的方向键/Home
 //! - IME 关闭时把无 legacy 等价物的序列回译为 legacy 字节（如 ctrl+a → 0x01），
 //!   使不了解 kitty protocol 的 shell/readline 正常工作
 
@@ -37,11 +38,6 @@ impl KeyEvent {
     pub fn is_press(&self) -> bool {
         self.event_type == EventType::Press
     }
-
-    /// Ctrl+Space —— IME 开关
-    pub fn is_toggle(&self) -> bool {
-        self.terminator == b'u' && self.codepoint == 32 && self.modifiers == CTRL
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,6 +55,8 @@ enum State {
     Ground,
     Esc,
     Csi,
+    /// SS3（`\eO` + 终结字节）：application 模式下方向键/Home 等
+    Ss3,
 }
 
 /// 增量 CSI 解析器：任意分片的字节流喂入，产出事件序列
@@ -91,6 +89,9 @@ impl Parser {
                     if b == b'[' {
                         self.state = State::Csi;
                         self.buf.push(b);
+                    } else if b == b'O' {
+                        self.state = State::Ss3;
+                        self.buf.push(b);
                     } else if b == 0x1b {
                         // 连续 ESC：前一个按普通字节处理
                         events.push(InputEvent::Byte(0x1b));
@@ -101,6 +102,23 @@ impl Parser {
                         self.buf.clear();
                         self.state = State::Ground;
                     }
+                }
+                State::Ss3 => {
+                    self.buf.push(b);
+                    if (0x40..=0x7e).contains(&b) {
+                        // SS3 终结字节（A/B/C/D 方向键、H/F Home/End 等）：
+                        // 与 CSI 功能键同构，terminator 即终结字节，codepoint 置 0
+                        events.push(InputEvent::Key(KeyEvent {
+                            codepoint: 0,
+                            modifiers: 0,
+                            event_type: EventType::Press,
+                            terminator: b,
+                            raw: self.buf.clone(),
+                        }));
+                        self.buf.clear();
+                        self.state = State::Ground;
+                    }
+                    // 其余字节：继续等待（非法序列由超时冲刷兜底）
                 }
                 State::Csi => {
                     self.buf.push(b);
@@ -136,10 +154,14 @@ impl Parser {
     }
 
     /// 冲刷未完成序列（按 raw bytes 处理）
-    #[allow(dead_code)]
     pub fn flush(&mut self) -> Vec<InputEvent> {
         self.state = State::Ground;
         self.buf.drain(..).map(InputEvent::Byte).collect()
+    }
+
+    /// 是否有未完成序列（Esc/CSI/SS3 半途）；供裸 Esc 超时判定
+    pub fn has_pending(&self) -> bool {
+        !self.buf.is_empty()
     }
 }
 
@@ -287,7 +309,7 @@ mod tests {
         let ev = key(b"\x1b[32;5u");
         assert_eq!(ev.codepoint, 32);
         assert_eq!(ev.modifiers, CTRL);
-        assert!(ev.is_toggle());
+        assert_eq!(ev.terminator, b'u'); // CSI-u format, usable as toggle
     }
 
     #[test]
@@ -339,13 +361,44 @@ mod tests {
     }
 
     #[test]
+    fn parse_ss3_keys() {
+        // application 光标模式下方向键为 SS3 序列
+        let ev = key(b"\x1bOA");
+        assert_eq!(ev.terminator, b'A');
+        assert_eq!(ev.modifiers, 0);
+        assert_eq!(ev.raw, b"\x1bOA");
+
+        let ev = key(b"\x1bOD");
+        assert_eq!(ev.terminator, b'D');
+
+        let ev = key(b"\x1bOH"); // Home
+        assert_eq!(ev.terminator, b'H');
+    }
+
+    #[test]
+    fn ss3_fragmented() {
+        let mut p = Parser::new();
+        assert!(p.feed(b"\x1bO").is_empty());
+        assert!(p.has_pending());
+        match p.feed(b"B").as_slice() {
+            [InputEvent::Key(ev)] if ev.terminator == b'B' => {}
+            other => panic!("expected SS3 Down key, got {other:?}"),
+        }
+        assert!(!p.has_pending());
+    }
+
+    #[test]
     fn parse_fragmented() {
         let mut p = Parser::new();
         assert!(p.feed(b"\x1b[3").is_empty());
         assert!(p.feed(b"2;").is_empty());
         let events = p.feed(b"5u");
         match events.as_slice() {
-            [InputEvent::Key(ev)] => assert!(ev.is_toggle()),
+            [InputEvent::Key(ev)] => {
+                assert_eq!(ev.codepoint, 32);
+                assert_eq!(ev.modifiers, CTRL);
+                assert_eq!(ev.terminator, b'u');
+            }
             other => panic!("expected toggle Key, got {other:?}"),
         }
     }
@@ -370,7 +423,7 @@ mod tests {
         let events = p.feed(b"a\x1b[32;5ub");
         assert_eq!(events.len(), 3);
         assert_eq!(events[0], InputEvent::Byte(b'a'));
-        assert!(matches!(&events[1], InputEvent::Key(k) if k.is_toggle()));
+        assert!(matches!(&events[1], InputEvent::Key(k) if k.codepoint == 32 && k.modifiers == CTRL && k.terminator == b'u'));
         assert_eq!(events[2], InputEvent::Byte(b'b'));
     }
 
