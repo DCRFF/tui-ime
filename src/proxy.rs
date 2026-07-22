@@ -161,17 +161,10 @@ impl InputFilter {
     }
 
     fn is_toggle_key(&self, k: &crate::keyevent::KeyEvent) -> bool {
-        // kitty 协议修饰键编码 = 实际 bitmask + 1，parser 存解码后值
-        let want_mod = if self.toggle_modifiers > 0 {
-            self.toggle_modifiers - 1
-        } else {
-            0
-        };
+        let want_mod = if self.toggle_modifiers > 0 { self.toggle_modifiers - 1 } else { 0 };
         k.is_press() && k.terminator == b'u'
-            && k.codepoint == self.toggle_codepoint
-            && k.modifiers == want_mod
+            && k.codepoint == self.toggle_codepoint && k.modifiers == want_mod
     }
-
     fn log_line(&mut self, line: &str) {
         if let Some(f) = &mut self.log {
             let _ = writeln!(f, "{line}");
@@ -232,8 +225,6 @@ impl InputFilter {
         Ok(())
     }
 
-    /// IME 开启时：按键 → rime；commit 文本注入 PTY master（计划 D6 时序）。
-    /// IME 开启时：按键经 daemon IPC → rime；commit 文本注入 PTY master。
     /// 返回 true = rime 消费了按键；false = rime 拒绝（调用方在非组合态应透传原按键）
     fn rime_key(&mut self, key_code: i32, modifiers: i32, writer: &mut dyn Write) -> Result<bool> {
         let session_id = match self.session_id {
