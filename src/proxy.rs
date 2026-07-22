@@ -477,6 +477,10 @@ pub fn run(command: &[String], log: Option<File>) -> Result<i32> {
     cmd.args(&command[1..]);
     // 注入防嵌套标记：子进程（及其后代）再启动 tui-ime 时据此拒绝
     cmd.env(crate::NEST_GUARD_ENV, "1");
+    // 继承当前工作目录（否则 shell 默认跳到 ~/）
+    if let Ok(cwd) = std::env::current_dir() {
+        cmd.cwd(cwd);
+    }
     let mut child = pair.slave.spawn_command(cmd).context("spawn child")?;
     // 子进程已持有 slave；关闭 proxy 侧引用，保证子进程退出后 master 读端收到 EOF/EIO
     drop(pair.slave);
