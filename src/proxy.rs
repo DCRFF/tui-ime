@@ -54,6 +54,13 @@ fn term_cols() -> u16 {
     }
 }
 
+fn term_rows() -> u16 {
+    match crossterm::terminal::size() {
+        Ok((_, r)) if r > 0 => r,
+        _ => 24,
+    }
+}
+
 /// RAII：进入时开启终端 raw mode，drop 时恢复
 struct RawModeGuard;
 
@@ -214,10 +221,10 @@ impl InputFilter {
         self.composing = strip.is_active();
         if self.composing {
             if !was_composing {
-                // 空→非空跃迁：查询光标列以精确截断（计划 D3）
+                // 空→非空跃迁：查询光标行列以精确截断/借行（计划 D3）
                 self.query_cursor_col()?;
             }
-            let out = self.renderer.draw(strip, term_cols());
+            let out = self.renderer.draw(strip, term_cols(), term_rows());
             self.write_stdout(&out)?;
         } else if was_composing {
             self.clear_ui()?;
@@ -369,14 +376,14 @@ impl InputFilter {
                     forward_key(&k, writer)?;
                 }
             }
-            InputEvent::Dsr { col, raw, .. } => {
+            InputEvent::Dsr { row, col, raw } => {
                 if self.dsr_pending {
-                    // 我们发起的查询：记录列并按精确宽度重绘
+                    // 我们发起的查询：记录行列并按精确宽度/借行重绘
                     self.dsr_pending = false;
-                    self.renderer.set_cursor_col(col);
+                    self.renderer.set_cursor_pos(row, col);
                     if self.composing {
                         let strip = self.snapshot_strip();
-                        let out = self.renderer.draw(&strip, term_cols());
+                        let out = self.renderer.draw(&strip, term_cols(), term_rows());
                         self.write_stdout(&out)?;
                     }
                 } else {

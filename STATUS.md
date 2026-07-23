@@ -25,6 +25,7 @@ tmux 多窗格端到端验证 OK（toggle → 候选条 → 上屏）；daemon �
 - [x] daemon 部署：`~/.local/bin/` 二进制 + `systemctl --user enable --now tui-ime-daemon`
 - [x] proxy 触发点改入 `~/.zshrc`（与 tmux 解耦，`TUI_IME_ACTIVE` 防嵌套）
 - [x] 裸终端 modifyOtherKeys 兼容：解析 `\e[27;<mod>;<cp>~` 并归一化为 CSI u（修复非 tmux 环境 Ctrl+\ 乱码、toggle 失效）
+- [x] IL/DL 借行渲染：光标行横向空间 < 16 列时候选条搬到光标下一行（`\e[L` 借空行、`\e[M` 对称归还），解决行尾盲打；末行/无 DSR 回退 inline 截断
 - [x] 移除联调期临时调试日志（`toggle_check` / `rime_key` eprintln）
 - [x] `cargo test --lib` 38 项全绿
 
@@ -49,8 +50,15 @@ systemd unit 与 `~/.local/bin/` 二进制此前从未安装。
 **修复**: 二进制安装到 `~/.local/bin/`，`tui-ime-daemon.service` 安装并
 `enable --now`（`Restart=on-failure` 崩溃自动拉起）。
 
-**遗留改进**: proxy 对 daemon 不可用的降级过于隐蔽（raw mode 下 eprintln 不可见），
-可考虑启动时可见提示或连接失败时自动 spawn daemon。
+**遗留改进**:
+
+- proxy 对 daemon 不可用的降级过于隐蔽（raw mode 下 eprintln 不可见），
+  可考虑启动时可见提示或连接失败时自动 spawn daemon。
+- 集成测试 `tests/proxy_passthrough.rs` 6 项失败为 Phase 3 重构遗留
+  （2 项已标 ignored），需单独修复；`cargo test --lib` 不受影响。
+- 借行渲染在全屏程序（光标下方有真实内容）中可能造成瞬时错乱，
+  待程序重绘恢复；竖排多行候选见
+  `docs/reports/2026-07-22-02-candidate-strip-layout-options.md`。
 
 ## 已完成（Phase 2）
 
@@ -75,7 +83,7 @@ systemd unit 与 `~/.local/bin/` 二进制此前从未安装。
 | 切换键 | 默认 `Ctrl+\`，`TUI_IME_TOGGLE` 环境变量可配 |
 | librime 初始化 | daemon 独占，`OnceLock` 防多次调用 |
 | Kitty 编码 | 配置用原始值（bitmask+1），parser 存解码值 |
-| 组合 UI | inline 单行候选条（popup 推迟 Phase 4） |
+| 组合 UI | inline 单行候选条；行尾空间不足时 IL/DL 借下一行（popup 推迟 Phase 4） |
 
 ## 相关文档
 

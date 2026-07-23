@@ -67,7 +67,7 @@ src/
   keyevent.rs      # CSI u / SS3 增量解析 + kitty→legacy 回译
   keymap.rs        # 按键 → rime keycode/mask 映射
   proxy.rs         # PTY proxy 核心：透传 + InputFilter（经 daemon IPC）
-  render.rs        # inline ANSI 候选条渲染
+  render.rs        # inline ANSI 候选条渲染（横向不足时 IL/DL 借下一行）
   bin/
     daemon.rs      # tui-ime-daemon CLI 入口
     popup.rs       # tui-ime-popup CLI 入口（骨架）

@@ -143,8 +143,10 @@ stored per-installation under `~/.local/share/tui-ime/rime/`, separate from
 ibus/fcitx.
 
 Note: horizontal/vertical layout and other UI-style settings are frontend
-concerns — tui-ime always renders a single-line inline strip, so options like
-`style/horizontal` have no effect.
+concerns — tui-ime renders its own single-line strip, so options like
+`style/horizontal` have no effect. If the cursor line has too little room
+(typing at the right edge), the strip temporarily moves to a borrowed blank
+line below the cursor (ANSI IL/DL) and is restored on commit.
 
 ## Using inside tmux (optional)
 

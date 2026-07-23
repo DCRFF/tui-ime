@@ -133,8 +133,9 @@ librime 在重启后的首个 session 创建时（即下次打开终端进入 pr
 `rime-data-double-pinyin`）。用户词库和词频按安装独立存放于
 `~/.local/share/tui-ime/rime/`，与 ibus/fcitx 互不相通。
 
-注意：横排/竖排等 UI 样式属于前端行为，tui-ime 永远渲染单行 inline
-候选条，`style/horizontal` 之类的设置无效。
+注意：横排/竖排等 UI 样式属于前端行为，tui-ime 渲染自己的单行候选条，
+`style/horizontal` 之类的设置无效。当光标行横向空间不足时（在行尾输入），
+候选条会临时搬到光标下一行借来的空白行（ANSI IL/DL），上屏后原样恢复。
 
 ## tmux 内使用的额外要求（不开 tmux 可忽略）
 
