@@ -3,6 +3,8 @@ name = "tui-ime"
 version = "0.1.0"
 edition = "2021"
 description = "Terminal-embedded Chinese IME: PTY proxy + librime + tmux popup"
+license = "MIT"
+repository = "https://github.com/DCRFF/tui-ime"
 
 [[bin]]
 name = "tui-ime"
