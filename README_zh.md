@@ -150,6 +150,11 @@ set -as terminal-features ",xterm-256color:extkeys" # 声明外层终端支持�
 
 改完需 detach + reattach 生效（`extended-keys always` 可替代第三行）。
 
+proxy 还会向 tmux 镜像窗格内的前台程序：前台程序变化（zsh → nvim → zsh）
+时经 `tmux rename-window` 驱动窗口名（tmux 会在窗口被命名后关闭该窗口的
+automatic-rename；你手动改名后 proxy 自动停驶），新建窗口/分裂也会落在
+内层 shell 的当前目录。
+
 ## 仓库结构
 
 ```
@@ -171,6 +176,7 @@ tui-ime/
     ├── ime.rs             ← librime 会话封装
     ├── keyevent.rs        ← CSI u / SS3 / modifyOtherKeys 解析
     ├── keymap.rs          ← 按键 → rime keycode 映射
+    ├── identity.rs        ← 前台进程身份镜像（tmux）
     ├── proxy.rs           ← PTY proxy 核心
     ├── render.rs          ← inline ANSI 候选条
     ├── main.rs            ← tui-ime（proxy）入口

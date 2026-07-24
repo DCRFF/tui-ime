@@ -1,6 +1,6 @@
 # STATUS.md — 项目状态
 
-**更新**: 2026-07-22
+**更新**: 2026-07-24
 
 ## 当前阶段: Phase 3 产品化 — ✅ 联调通过
 
@@ -27,6 +27,7 @@ tmux 多窗格端到端验证 OK（toggle → 候选条 → 上屏）；daemon �
 - [x] 裸终端 modifyOtherKeys 兼容：解析 `\e[27;<mod>;<cp>~` 并归一化为 CSI u（修复非 tmux 环境 Ctrl+\ 乱码、toggle 失效）
 - [x] IL/DL 借行渲染：光标行横向空间 < 16 列时候选条搬到光标下一行（`\e[L` 借空行、`\e[M` 对称归还），解决行尾盲打；末行/无 DSR 回退 inline 截断
 - [x] 移除联调期临时调试日志（`toggle_check` / `rime_key` eprintln）
+- [x] proxy 身份镜像：内部 PTY 前台进程 cwd 同步到 proxy 自身（修新 pane 路径）+ fg 变化时 `tmux rename-window` 驱动窗口名（修窗口名恒 tui-ime；`src/identity.rs`，见 docs/reports/2026-07-24-01）
 - [x] `cargo test --lib` 38 项全绿
 
 ## 联调状态（2026-07-22 全部通过）

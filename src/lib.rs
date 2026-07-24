@@ -2,6 +2,7 @@
 
 pub mod config;
 pub mod daemon;
+pub mod identity;
 pub mod ime;
 pub mod ipc;
 pub mod keyevent;

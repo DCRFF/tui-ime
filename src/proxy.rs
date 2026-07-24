@@ -27,6 +27,7 @@ use signal_hook::iterator::Signals;
 const ESC_FLUSH_MS: u16 = 30;
 
 use crate::daemon;
+use crate::identity::IdentityMirror;
 use crate::ipc::IpcClient;
 use crate::keyevent::{to_legacy, InputEvent, Parser};
 use crate::keymap::{byte_to_rime, key_to_rime, XK_ESCAPE};
@@ -168,9 +169,15 @@ impl InputFilter {
     }
 
     fn is_toggle_key(&self, k: &crate::keyevent::KeyEvent) -> bool {
-        let want_mod = if self.toggle_modifiers > 0 { self.toggle_modifiers - 1 } else { 0 };
-        k.is_press() && k.terminator == b'u'
-            && k.codepoint == self.toggle_codepoint && k.modifiers == want_mod
+        let want_mod = if self.toggle_modifiers > 0 {
+            self.toggle_modifiers - 1
+        } else {
+            0
+        };
+        k.is_press()
+            && k.terminator == b'u'
+            && k.codepoint == self.toggle_codepoint
+            && k.modifiers == want_mod
     }
     fn log_line(&mut self, line: &str) {
         if let Some(f) = &mut self.log {
@@ -482,6 +489,8 @@ pub fn run(command: &[String], log: Option<File>) -> Result<i32> {
     let mut child = pair.slave.spawn_command(cmd).context("spawn child")?;
     // 子进程已持有 slave；关闭 proxy 侧引用，保证子进程退出后 master 读端收到 EOF/EIO
     drop(pair.slave);
+    // 身份镜像用：内部 PTY session leader 的 pid（见 src/identity.rs）
+    let child_pid = child.process_id();
 
     let master = pair.master;
     let mut reader = master.try_clone_reader().context("clone master reader")?;
@@ -527,11 +536,17 @@ pub fn run(command: &[String], log: Option<File>) -> Result<i32> {
     // ModeSnoop 侦测子进程输出中的终端模式重置（如 nvim 退出时的 \e[>4;0m），
     // 转发后补发模式请求，保证 toggle 键在全屏程序退出后仍可用。
     let mut snoop = ModeSnoop::new();
+    // tmux 只能观察到 proxy 进程：随子进程输出限流镜像内部前台进程身份
+    // （cwd 到自身、窗口名经 tmux rename-window），见 src/identity.rs
+    let mut mirror = child_pid.map(IdentityMirror::new);
     let mut buf = [0u8; 16384];
     loop {
         match reader.read(&mut buf) {
             Ok(0) => break,
             Ok(n) => {
+                if let Some(mirror) = &mut mirror {
+                    mirror.maybe_sync();
+                }
                 let repush = snoop.scan(&buf[..n]);
                 let mut out = stdout.lock().expect("stdout mutex");
                 out.write_all(&buf[..n])?;

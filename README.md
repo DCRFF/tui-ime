@@ -163,6 +163,12 @@ set -as terminal-features ",xterm-256color:extkeys" # declare outer terminal sup
 Detach and reattach for the change to take effect (`extended-keys always` can
 replace the third line).
 
+The proxy also mirrors the pane's inner foreground program for tmux: as it
+changes (zsh → nvim → zsh) the proxy drives the window name via
+`tmux rename-window` (tmux disables per-window automatic-rename once a name is
+set; if you rename the window manually the proxy stops driving it), and new
+windows/splits inherit the inner shell's current directory.
+
 ## Repository layout
 
 ```
@@ -184,6 +190,7 @@ tui-ime/
     ├── ime.rs             ← librime session wrapper
     ├── keyevent.rs        ← CSI u / SS3 / modifyOtherKeys parsing
     ├── keymap.rs          ← key → rime keycode mapping
+    ├── identity.rs        ← foreground identity mirror (tmux)
     ├── proxy.rs           ← PTY proxy core
     ├── render.rs          ← inline ANSI candidate strip
     ├── main.rs            ← tui-ime (proxy) entry

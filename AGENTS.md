@@ -66,6 +66,7 @@ src/
   ime.rs           # librime 会话封装（daemon 使用；proxy 已移除直接依赖）
   keyevent.rs      # CSI u / SS3 增量解析 + kitty→legacy 回译
   keymap.rs        # 按键 → rime keycode/mask 映射
+  identity.rs      # 前台进程身份镜像：cwd 同步 + tmux rename-window 驱动窗口名
   proxy.rs         # PTY proxy 核心：透传 + InputFilter（经 daemon IPC）
   render.rs        # inline ANSI 候选条渲染（横向不足时 IL/DL 借下一行）
   bin/
